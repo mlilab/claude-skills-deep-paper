@@ -45,7 +45,7 @@ def pipe_table_to_notion(block: str) -> str:
 
 
 def convert_body(body: str, figs: dict, uploads: list) -> str:
-    lines, outl, i = body.split("\n"), [], 0
+    lines, outl, i, indents = body.split("\n"), [], 0, []
     while i < len(lines):
         ln = lines[i]
         # callouts
@@ -94,6 +94,15 @@ def convert_body(body: str, figs: dict, uploads: list) -> str:
             outl.append(f"#### {m.group(2)}")
             i += 1
             continue
+        # nested list items: Notion nests children by tabs, Markdown by spaces. The depth is the
+        # number of distinct, smaller indents seen since the list started.
+        m = re.match(r"^( *)(?=([-*+]|\d+[.)])\s)", ln)
+        if m:
+            ind = len(m.group(1))
+            indents = [x for x in indents if x < ind] + [ind]
+            ln = "\t" * (len(indents) - 1) + ln.lstrip(" ")
+        elif ln.strip() and not ln.startswith(" "):
+            indents = []
         outl.append(ln)
         i += 1
     text = "\n".join(outl)

@@ -112,6 +112,11 @@ class NotionTest(unittest.TestCase):
         self.assertIn('<span underline="true">key</span>', out)
         self.assertEqual(up[0]["figure"], "2")
 
+    def test_nested_list(self):
+        out = notion_md.convert_body("- a\n  - b\n    - c\n1. x\n   - y", {}, [])
+        self.assertIn("- a\n\t- b\n\t\t- c", out)
+        self.assertIn("1. x\n\t- y", out)
+
     def test_inline(self):
         out = notion_md.notion_inline("Loss $a_i$ is small, a < b, ~5%. $$x^2$$ and `c<d`")
         self.assertIn("$`a_i`$", out)
