@@ -60,7 +60,8 @@ table.db tr[hidden] { display: none; }
 table.db td.t { min-width: 320px; }
 table.db td.t > a { font-weight: 650; color: var(--text); }
 table.db .tl { color: var(--muted); font-size: 13px; margin-top: 4px; }
-table.db td:nth-child(2), table.db td:nth-child(3), table.db td:nth-child(6) { white-space: nowrap; }
+table.db td:nth-child(2), table.db td:nth-child(3), table.db td:nth-child(4), table.db td:nth-child(7), table.db td:nth-child(8) { white-space: nowrap; }
+table.db td.links a { margin-right: 6px; }
 
 /* ---------------- paper page: bar + split */
 .paper-page { height: 100vh; overflow: hidden; }
@@ -136,3 +137,4 @@ button.pg { border: 1px solid var(--line); background: var(--surface); color: va
   font-size: 11.5px; padding: 0 6px; margin-left: 6px; cursor: pointer; vertical-align: middle; line-height: 1.6; }
 button.pg:hover { color: var(--accent); border-color: var(--accent); }
 .missing { color: #c0392b; }
+table.db .abbr { font-size: 12.5px; margin-left: 0; }

@@ -1,27 +1,58 @@
-# Onboarding
+# Onboarding (first run only)
 
-Talk in the user's language. Ask once for the choices below, use defaults for anything not given,
-then write the config. Never ask for a token in chat.
+Run this once, when `setup.py status` says `configured: false` or the user asks to set the skill
+up again. Talk in the user's language. Never ask for a token in chat. After onboarding the choices
+live in the config, so a later "summarize this paper" uses them without asking again.
 
-1. **Backend**: `html` (a static site in a local folder; open it, serve it, or host it), `notion`
-   (one database row per paper), or `both`.
-2. **Write-up language**: `en`, or `ko` (Korean sentences with English technical terms).
-   Other languages work the same way: Korean-style rules apply to any non-English choice.
-3. **Data folder** (default `~/deep-papers`): working files for every paper and, for HTML, the site.
-4. **Categories** (optional): the broad areas used for the `category` field. Default list:
-   LLM, Reasoning, Agents, Vision-Language, Computer Vision, Generative Models, Video, 3D, Robotics,
-   Reinforcement Learning, Efficient ML, Theory, Benchmark, Survey.
-5. **Notion only**: an existing database to use, or create a new one (below).
+## 1. Ask once
 
-Write the answers to a temporary JSON file outside the skill folder and run:
+1. **Where to save**: `notion` (a table in a Notion page), `html` (a web page per paper with the
+   PDF side by side), or `both`.
+2. **Write-up language**: `en`, or `ko` (Korean sentences with English technical terms). Other
+   languages follow the Korean rule.
+3. Optional: categories (default list in `config.example.yaml`).
 
-```bash
-python3 <skill_dir>/scripts/setup.py init --answers /tmp/deep-paper-answers.json
-python3 <skill_dir>/scripts/setup.py status
-```
+Write the answers to a temporary JSON file outside the skill folder and run
+`setup.py init --answers FILE` (format: `{"backend": "notion", "language": "ko"}`; for html the
+data folder is set in step 3).
 
-Answers format: `{"backend": "html", "language": "ko", "data_dir": "~/deep-papers",
-"site_title": "Deep Papers", "categories": [...], "notion_data_source_id": "..."}`.
+## 2. Notion
+
+Ask for the **name of the Notion page** that should hold the paper table, then follow
+"Notion database" below. That is all; every later paper is added to that table.
+
+## 3. HTML: where the site lives
+
+Run `setup.py status` and look at `daily_papers`:
+
+- **The user already runs a daily-papers digest site and `supports_deep` is true**: put the
+  papers inside that site as its `deep/` sub page, encrypted with the same password:
+
+  ```bash
+  python3 <skill_dir>/scripts/setup.py html-set --mode daily-papers
+  ```
+
+  The index gets a link back to the digest. `publish.py` runs the digest's own publisher.
+- **Otherwise** (no digest site, or one without `deep/` support): a GitHub Pages site of its own.
+  Tell the user to:
+  1. Create an empty **public** repository on GitHub, for example `papers`; the site will be at
+     `https://<username>.github.io/<repository>/`.
+  2. Create a fine-grained personal access token limited to that repository with **Contents,
+     Pages and Administration: read and write** (GitHub → Settings → Developer settings →
+     Fine-grained tokens).
+  3. Store it in their own terminal (hidden prompt):
+     `python3 <skill_dir>/scripts/site_publish.py token`
+
+  Then run:
+
+  ```bash
+  python3 <skill_dir>/scripts/setup.py html-set --mode github --user <username> --repo <repository> --data-dir ~/deep-papers
+  python3 <skill_dir>/scripts/site_publish.py setup     # first push and Pages on
+  ```
+
+  Open the URL and confirm it loads. The site is public: write-ups and figures can be read by
+  anyone with the link. PDFs are never uploaded.
+- **The user does not want a public site**: `setup.py html-set --mode local`, then `serve.py`.
 
 ## Notion database (first run only)
 

@@ -20,8 +20,11 @@ Pipeline per paper: **resolve → fetch → refs + venue → read → write → 
 python3 <skill_dir>/scripts/setup.py status
 ```
 
-If `configured` is false, follow [references/onboarding.md](references/onboarding.md) first: the
-user picks the backend (`html`, `notion` or `both`) and the write-up language.
+If `configured` is false (or the HTML backend has no `html_mode`), run
+[references/onboarding.md](references/onboarding.md) first: the user picks Notion, HTML or both,
+and the language; Notion asks for a page, HTML goes into an existing daily-papers site or a new
+GitHub Pages repository. Once configured, **do not ask again**: every later request uses the
+saved choices.
 
 ## 1. Resolve the paper
 
@@ -94,9 +97,14 @@ python3 <skill_dir>/scripts/render.py --id <id>
 ```
 
 This writes the split-view page (write-up left, original PDF right, page buttons on headings and
-figures) and refreshes the index (`<data_dir>/index.html`, a sortable, filterable table of all
-papers). Give the user the page path; `serve.py` serves the folder locally. See
-[references/html.md](references/html.md).
+figures) and refreshes the index (`<data_dir>/index.html`, a table with the same columns as the
+Notion database). Then publish it the way onboarding chose:
+
+```bash
+python3 <skill_dir>/scripts/publish.py
+```
+
+It prints the site URL (or, for `local`, the index path). See [references/html.md](references/html.md).
 
 **Notion** (`backend: notion` or `both`): follow [references/notion.md](references/notion.md):
 

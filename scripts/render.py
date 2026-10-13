@@ -239,7 +239,12 @@ def render_paper(cfg, pid: str) -> dict:
     return {"id": meta["id"], "arxiv_id": meta.get("arxiv_id"), "title": meta["title"],
             "abbr": front.get("abbr") or "", "icon": front.get("icon") or "", "venue": venue,
             "submitted": meta.get("submitted", ""), "category": cats, "tags": tags,
-            "tldr": front.get("tldr") or [], "page": f"papers/{pdir.name}/index.html"}
+            "tldr": front.get("tldr") or [], "page": f"papers/{pdir.name}/index.html",
+            "links": {k: v for k, v in (meta.get("links") or {}).items() if k in ("pdf", "abs")}}
+
+
+COLUMNS = ["Title", "Abbr", "Venue", "Submitted", "Category", "Tags", "Link", "Added"]
+SORTABLE = {"Title", "Abbr", "Venue", "Submitted", "Added"}
 
 
 def render_index(cfg, entries: list):
@@ -253,25 +258,33 @@ def render_index(cfg, entries: list):
     for e in entries:
         search = " ".join([e["title"], e.get("abbr", ""), e.get("venue", ""), " ".join(e.get("tags", [])),
                            " ".join(e.get("category", []))]).lower()
+        links = e.get("links") or {}
+        link_cell = "".join(f'<a href="{esc(u)}" target="_blank" rel="noopener">{n}</a> '
+                            for n, u in (("PDF", links.get("pdf")), ("arXiv", links.get("abs"))) if u)
+        if e.get("notion_url"):
+            link_cell += f'<a href="{esc(e["notion_url"])}" target="_blank" rel="noopener">Notion</a>'
         rows.append(f"""<tr data-cats="{esc('|'.join(e.get('category', [])))}" data-search="{esc(search)}">
 <td class="t"><a href="{esc(e['page'])}"><span class="ico">{esc(e.get('icon', ''))}</span> {esc(e['title'])}</a>
-{f'<span class="abbr">{esc(e["abbr"])}</span>' if e.get('abbr') else ''}
 <div class="tl">{inline_md(e['tldr'][0]) if e.get('tldr') else ''}</div></td>
+<td data-sort="{esc(e.get('abbr', ''))}">{f'<span class="abbr">{esc(e["abbr"])}</span>' if e.get('abbr') else ''}</td>
 <td data-sort="{esc(e.get('venue', ''))}">{esc(e.get('venue', ''))}</td>
 <td data-sort="{esc(e.get('submitted', ''))}">{esc(e.get('submitted', ''))}</td>
 <td>{''.join(f'<span class="chip cat">{esc(c)}</span>' for c in e.get('category', []))}</td>
 <td>{''.join(f'<span class="chip">{esc(x)}</span>' for x in e.get('tags', []))}</td>
+<td class="links">{link_cell}</td>
 <td data-sort="{esc(e.get('added', ''))}">{esc(e.get('added', ''))}</td></tr>""")
     hl = cfg["html"].get("home_link") or {}
     home = (f'<a class="home" href="{esc(hl.get("href"))}">← {esc(hl.get("label", "Home"))}</a>'
             if hl.get("href") else "")
+    # column names match the Notion database
+    head = "".join(f'<th data-col="{i}">{n}</th>' if n in SORTABLE else f"<th>{n}</th>"
+                   for i, n in enumerate(COLUMNS))
     body = f"""<main class="wrap index">
 <header class="masthead">{home}<h1>{esc(cfg["html"]["title"])}</h1><p class="sub">{len(entries)} {t["papers"]}</p></header>
 <div class="toolbar"><div class="filters">{"".join(bar)}</div>
 <input class="search" type="search" placeholder="{t["search"]}"></div>
 <div class="table-wrap"><table class="db">
-<thead><tr><th data-col="0">{t["title"]}</th><th data-col="1">{t["venue"]}</th><th data-col="2">{t["submitted"]}</th>
-<th>{t["category"]}</th><th>{t["tags"]}</th><th data-col="5">{t["added"]}</th></tr></thead>
+<thead><tr>{head}</tr></thead>
 <tbody>{"".join(rows)}</tbody></table></div>
 </main>"""
     root = cfg["data_dir"]

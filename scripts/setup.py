@@ -6,6 +6,8 @@ usage: setup.py status                       # JSON: config, dependencies, backe
        setup.py notion-schema                 # CREATE TABLE statement for the Notion database
        setup.py notion-set --data-source ID --database-url URL [--parent-page URL]
                                               # remember the database so every paper goes there
+       setup.py html-set --mode daily-papers|github|local [--user GH_USER --repo REPO] [--data-dir DIR]
+                                              # remember where the HTML site lives
 
 Answers JSON for init (all optional except backend):
 {"backend": "html" | "notion" | "both", "language": "en" | "ko", "data_dir": "~/deep-papers",
@@ -16,8 +18,10 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import shutil
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -33,6 +37,28 @@ NOTION_COLUMNS = [
     ("Tags", "multi_select", "method/topic keywords"),
     ("Added", "created_time", "when the row was created"),
 ]
+
+
+def find_daily_papers() -> dict | None:
+    """An installed daily-papers digest: its skill folder, Python, config and site settings."""
+    home = Path.home()
+    cfg_p = Path(os.environ.get("DAILY_PAPERS_CONFIG", home / ".config" / "daily-papers" / "config.yaml"))
+    if not cfg_p.exists():
+        return None
+    skill = next((d for d in (home / ".claude" / "skills" / "daily-papers", home / ".codex" / "skills" / "daily-papers")
+                  if (d / "scripts" / "publish.py").exists()), None)
+    dcfg = yaml.safe_load(cfg_p.read_text(encoding="utf-8")) or {}
+    out_dir = Path(os.path.expanduser(dcfg.get("output_dir") or "~/daily-papers"))
+    venv = home / ".local" / "share" / "daily-papers" / "venv" / "bin" / "python"
+    pub = dcfg.get("publish") or {}
+    supports = bool(skill) and '"deep"' in (skill / "scripts" / "publish.py").read_text(encoding="utf-8")
+    return {"config": str(cfg_p), "skill_dir": str(skill) if skill else None,
+            "python": str(venv) if venv.exists() else sys.executable,
+            "output_dir": str(out_dir), "deep_dir": str(out_dir / "deep"),
+            "publish_enabled": bool(pub.get("enabled")),
+            "site_url": pub.get("url") or (f"https://{pub['github_user']}.github.io/{pub.get('repo', 'papers')}/"
+                                           if pub.get("github_user") else None),
+            "supports_deep": supports}
 
 
 def status():
@@ -62,9 +88,13 @@ def status():
     backend = cfg.get("backend")
     if cfg_ok and backend in ("notion", "both") and not (cfg.get("notion") or {}).get("data_source_id"):
         next_steps.append("Notion: create the database (setup.py notion-schema) and set notion.data_source_id")
+    html_mode = (cfg.get("html") or {}).get("mode")
+    if cfg_ok and backend in ("html", "both") and not html_mode:
+        next_steps.append("HTML: choose where the site lives (onboarding: daily-papers sub site, own GitHub Pages, or local)")
     out({"configured": cfg_ok, "config": str(config_path()), "skill_dir": str(SKILL_DIR),
          "python": sys.executable, "backend": backend, "language": cfg.get("language"),
-         "data_dir": str(cfg["data_dir"]), "deps": deps,
+         "html_mode": html_mode, "data_dir": str(cfg["data_dir"]), "deps": deps,
+         "daily_papers": find_daily_papers(),
          "tools": {"rsvg-convert": bool(shutil.which("rsvg-convert"))},
          "problems": problems, "next_steps": next_steps})
 
@@ -99,13 +129,53 @@ def init(answers_path: str, force: bool):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=["status", "init", "notion-schema", "notion-set"])
+    ap.add_argument("action", choices=["status", "init", "notion-schema", "notion-set", "html-set"])
+    ap.add_argument("--mode", choices=["daily-papers", "github", "local"])
+    ap.add_argument("--user")
+    ap.add_argument("--repo")
+    ap.add_argument("--data-dir")
     ap.add_argument("--answers")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--data-source")
     ap.add_argument("--database-url")
     ap.add_argument("--parent-page")
     args = ap.parse_args()
+    if args.action == "html-set":
+        p = config_path()
+        if not p.exists():
+            raise SystemExit("run setup.py init first")
+        cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        html = cfg.setdefault("html", {})
+        html["mode"] = args.mode
+        if args.mode == "daily-papers":
+            dp = find_daily_papers()
+            if not dp:
+                raise SystemExit("daily-papers is not set up on this machine; use --mode github or local")
+            if not dp["supports_deep"]:
+                raise SystemExit("this daily-papers version does not publish a deep/ sub site; "
+                                 "use --mode github (its own GitHub Pages repository) or --mode local")
+            cfg["data_dir"] = dp["deep_dir"]
+            html["daily_papers"] = {"skill_dir": dp["skill_dir"], "python": dp["python"], "config": dp["config"]}
+            html["home_link"] = {"href": "../index.html", "label": "Daily Papers"}
+            html.pop("github", None)
+            note = None
+        elif args.mode == "github":
+            if not (args.user and args.repo):
+                raise SystemExit("--user and --repo are required for --mode github")
+            html["github"] = {"user": args.user, "repo": args.repo,
+                              "url": f"https://{args.user}.github.io/{args.repo}/"}
+            html.pop("daily_papers", None)
+            html.pop("home_link", None)
+            note = "store a token with scripts/site_publish.py token, then scripts/site_publish.py setup"
+        else:
+            html.pop("daily_papers", None)
+            html.pop("github", None)
+            note = None
+        if args.data_dir:
+            cfg["data_dir"] = args.data_dir
+        p.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        out({"html": html, "data_dir": cfg.get("data_dir"), "next": note})
+        return
     if args.action == "notion-set":
         p = config_path()
         if not p.exists():
