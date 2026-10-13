@@ -19,7 +19,7 @@ With `venues: auto`, the submission year and the next year of:
 | venue | source |
 |---|---|
 | ICLR, ICML, NeurIPS | `https://<conf>.cc/static/virtual/data/<conf>-<year>-orals-posters.json` |
-| CVPR, ICCV, WACV | `https://openaccess.thecvf.com/<CONF><year>?day=all` (published at the conference) |
+| CVPR, ICCV (auto); WACV (only when listed in `venues`) | `https://openaccess.thecvf.com/<CONF><year>?day=all` (published at the conference) |
 | ECCV | `https://www.ecva.net/papers.php` |
 
 A list that is not out yet is skipped and retried after a day. Set `venues:` in the config to a

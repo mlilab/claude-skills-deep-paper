@@ -23,16 +23,24 @@ python3 <skill_dir>/scripts/setup.py status
 Answers format: `{"backend": "html", "language": "ko", "data_dir": "~/deep-papers",
 "site_title": "Deep Papers", "categories": [...], "notion_data_source_id": "..."}`.
 
-## Notion database
+## Notion database (first run only)
 
 1. The Notion MCP server must be connected (`claude mcp add --transport http notion
    https://mcp.notion.com/mcp`, then authenticate with `/mcp`).
-2. `setup.py notion-schema` lists the columns. Create the database with the Notion MCP
-   create-database tool under a page the user names (or have the user create it), with
-   `Category` options from the config.
-3. Put the database's **data source id** in `notion.data_source_id` (fetch the database with the
-   Notion tools to read it).
-4. Optional, only for figures of papers without arXiv HTML: an internal integration token
+2. **Ask the user for the name of the Notion page** that should hold the paper database (for
+   example "Papers/Reading"). Find it with the Notion search tool; if several pages match, show the
+   paths and let the user pick. If the user already has a database for papers, use that instead
+   and map its columns (references/notion.md).
+3. `setup.py notion-schema` prints the `CREATE TABLE` statement. Create the database with the
+   Notion MCP create-database tool, parent = that page, title "Papers" (or the user's name).
+   Then make it show **inside the page as a table** (not a separate full page to click into):
+   update the data source with `is_inline: true`, and set its default table view to
+   `SORT BY "Submitted" DESC; SHOW "Title", "Abbr", "Venue", "Submitted", "Category", "Tags", "Link", "Added"`
+   (name it "Newest first").
+4. Save it: `setup.py notion-set --data-source <collection id from the result> --database-url
+   <database url> --parent-page <page url>`. From then on every paper goes into this database;
+   do not ask again.
+5. Optional, only for figures of papers without arXiv HTML: an internal integration token
    (notion.so/my-integrations, connected to the database). Store it in a file with mode 600 and
    set `notion.token_file`, or export `NOTION_TOKEN`. Without it those figures are skipped and
    reported.

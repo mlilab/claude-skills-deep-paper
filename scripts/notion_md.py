@@ -88,10 +88,10 @@ def convert_body(body: str, figs: dict, uploads: list) -> str:
                      indent(convert_body("\n".join(inner).strip("\n"), figs, uploads)), "</details>"]
             i = j + 1
             continue
-        # headings deeper than ###: bold paragraph
-        m = re.match(r"^(#{4,6})\s+(.*)$", ln)
+        # Notion has headings 1-4; deeper ones become heading 4
+        m = re.match(r"^(#{5,6})\s+(.*)$", ln)
         if m:
-            outl.append(f"**{m.group(2)}**")
+            outl.append(f"#### {m.group(2)}")
             i += 1
             continue
         outl.append(ln)
@@ -120,7 +120,31 @@ def convert_body(body: str, figs: dict, uploads: list) -> str:
         return "\n".join(parts)
     text = FIG_REF.sub(fig_sub, text)
     text = re.sub(r"<u>(.*?)</u>", r'<span underline="true">\1</span>', text)
-    return text
+    return notion_inline(text)
+
+
+ALLOWED_TAGS = re.compile(r"</?(callout|table|tr|td|colgroup|col|details|summary|span|empty-block|br)\b[^>]*>")
+
+
+def notion_inline(text: str) -> str:
+    """Math and escaping in Notion's Markdown dialect: inline math is $`x`$, display math sits on
+    its own lines between $$, and a bare < or ~ in prose is escaped."""
+    stash = []
+
+    def keep(s):
+        stash.append(s)
+        return f"\x00{len(stash) - 1}\x00"
+    text = re.sub(r"```.*?```", lambda m: keep(m.group(0)), text, flags=re.S)
+    text = re.sub(r"`[^`\n]+`", lambda m: keep(m.group(0)), text)
+    text = re.sub(r"\$\$\s*(.+?)\s*\$\$", lambda m: keep("\n$$\n" + m.group(1).strip() + "\n$$\n"), text, flags=re.S)
+    text = re.sub(r"(?<![\\$])\$(?!\s)([^$\n]+?)(?<!\s)\$", lambda m: keep("$`" + m.group(1) + "`$"), text)
+    text = re.sub(r"!?\[[^\]]*\]\([^)]+\)", lambda m: keep(m.group(0)), text)  # links and images
+    text = ALLOWED_TAGS.sub(lambda m: keep(m.group(0)), text)
+    text = re.sub(r"(?<!\\)<", r"\\<", text)  # remaining "<" is prose, not a tag
+    text = re.sub(r"(?<![~\\])~(?!~)", r"\\~", text)
+    while "\x00" in text:
+        text = re.sub(r"\x00(\d+)\x00", lambda m: stash[int(m.group(1))], text)
+    return re.sub(r"\n{3,}", "\n\n", text)
 
 
 def build(cfg, pid: str) -> dict:

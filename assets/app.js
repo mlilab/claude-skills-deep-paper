@@ -4,14 +4,18 @@
   function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
   // ---------------------------------------------------------------- math
-  window.addEventListener('load', function () {
-    if (window.renderMathInElement) {
-      renderMathInElement(document.body, {
-        delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
-        throwOnError: false, ignoredClasses: ['pdf-pages']
-      });
-    }
-  });
+  function renderMath() {
+    if (!window.renderMathInElement || document.body.dataset.math) return;
+    document.body.dataset.math = '1';
+    renderMathInElement(document.body, {
+      delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
+      throwOnError: false, ignoredClasses: ['pdf-pages']
+    });
+  }
+  // KaTeX is loaded before this script; the load event may already be over when a host injects
+  // the page (e.g. a password-protected site that decrypts it), so try now and again on load.
+  renderMath();
+  window.addEventListener('load', renderMath);
 
   // ---------------------------------------------------------------- index page
   var table = document.querySelector('table.db');
@@ -149,14 +153,18 @@
   function observe() {
     io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
-        if (e.isIntersecting) {
-          renderPage(e.target);
-          var n = +e.target.dataset.page;
-          if (pageLabel) pageLabel.textContent = n + ' / ' + pdfDoc.numPages;
-        }
+        if (e.isIntersecting) renderPage(e.target);
       });
     }, { root: pagesEl, rootMargin: '600px 0px' });
     pageEls.forEach(function (el) { io.observe(el); });
+    pagesEl.addEventListener('scroll', updateLabel, { passive: true });
+    updateLabel();
+  }
+  function updateLabel() {  // the page at the top third of the viewer
+    if (!pageLabel || !pdfDoc) return;
+    var y = pagesEl.scrollTop + pagesEl.clientHeight / 3, n = 1;
+    for (var i = 0; i < pageEls.length; i++) { if (pageEls[i].offsetTop <= y) n = i + 1; else break; }
+    pageLabel.textContent = n + ' / ' + pdfDoc.numPages;
   }
   var rt = null;
   function rerender() {

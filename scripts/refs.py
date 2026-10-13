@@ -24,16 +24,28 @@ ATOM = "{http://www.w3.org/2005/Atom}"
 
 
 def search(title: str, first_author: str | None) -> str | None:
+    title = title.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     q = re.sub(r"[^\w\s-]", " ", title)
     q = " ".join(q.split()[:16])
     if len(q) < 8:
         return None
-    r = http_get("https://export.arxiv.org/api/query",
-                 params={"search_query": f'ti:"{q}"', "max_results": 5}, timeout=60, retries=3)
-    if r.status_code != 200:
-        return None
     want, want_tok = norm_title(title), title_tokens(title)
-    for e in ET.fromstring(r.content).findall(f"{ATOM}entry"):
+    words = [w for w in re.findall(r"[A-Za-z0-9]+", title.replace("'", "")) if len(w) > 3][:8]
+    queries = [f'ti:"{q}"'] + ([" AND ".join(f"ti:{w}" for w in words)] if len(words) >= 2 else [])
+    for query in queries:
+        r = http_get("https://export.arxiv.org/api/query",
+                     params={"search_query": query, "max_results": 5}, timeout=60, retries=3)
+        if r.status_code != 200:
+            continue
+        hit = best_entry(r.content, want, want_tok, first_author)
+        if hit:
+            return hit
+        time.sleep(3.1)
+    return None
+
+
+def best_entry(content: bytes, want: str, want_tok: set, first_author: str | None) -> str | None:
+    for e in ET.fromstring(content).findall(f"{ATOM}entry"):
         t = " ".join((e.findtext(f"{ATOM}title") or "").split())
         aid = (e.findtext(f"{ATOM}id") or "").rsplit("/abs/", 1)[-1]
         aid = re.sub(r"v\d+$", "", aid)

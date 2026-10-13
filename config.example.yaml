@@ -6,6 +6,7 @@ data_dir: ~/deep-papers # working files per paper, and the static site for the h
 
 html:
   title: Deep Papers    # site title on the index page
+  # home_link: {href: "../index.html", label: "Daily Papers"}   # optional link to a parent site
 
 notion:
   data_source_id: null  # the database (data source) that receives one row per paper

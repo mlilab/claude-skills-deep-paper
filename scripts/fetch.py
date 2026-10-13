@@ -91,6 +91,19 @@ def nearest_sec(node):
     return node.find_parent(lambda t: any(c in SEC_CLASSES for c in (t.get("class") or [])))
 
 
+def numbered_ancestor(node) -> tuple[str, str]:
+    """(number, top-level number) of the nearest section around `node` that has a number."""
+    if node is None:
+        return "", ""
+    cur = node if node is not None and any(c in SEC_CLASSES for c in (node.get("class") or [])) else nearest_sec(node)
+    while cur is not None:
+        num = heading_of(cur)[0]
+        if num:
+            return num, num.split(".")[0]
+        cur = nearest_sec(cur)
+    return "", ""
+
+
 def heading_of(sec: Tag):
     h = sec.find(re.compile(r"^h[1-6]$"), class_="ltx_title", recursive=False)
     if h is None:
@@ -171,12 +184,15 @@ def parse_html(html: str, base_url: str) -> dict:
         number, stitle = heading_of(s)
         in_app = s.find_parent(class_="ltx_appendix") is not None or cls == "ltx_appendix"
         paras = []
-        own = [p for p in s.find_all(class_="ltx_para") if nearest_sec(p) is s]
+        # paragraphs of this section only; a paragraph nested in another one (list items) is part of it
+        own = [p for p in s.find_all(class_="ltx_para") if nearest_sec(p) is s
+               and p.find_parent(class_="ltx_para") is None]
         for i, para in enumerate(own, 1):
             txt = node_text(para, labels)
             if txt:
                 paras.append({"id": f"S{number or s.get('id', '?')}.p{i}", "text": txt})
-        sections.append({"html_id": s.get("id"), "number": number, "title": stitle,
+        parent = numbered_ancestor(nearest_sec(s))[0] if not number else ""
+        sections.append({"html_id": s.get("id"), "number": number, "parent": parent, "title": stitle,
                          "level": LEVEL[cls], "in_appendix": in_app, "paragraphs": paras})
         for a in s.find_all("a", href=True):
             if a["href"].startswith("#bib.") and nearest_sec(a) is s:
@@ -205,9 +221,8 @@ def parse_html(html: str, base_url: str) -> dict:
                 continue
             imgs.append(list(dict.fromkeys(urljoin(b, src) for b in bases)))
         sec = nearest_sec(fig)
-        sec_num, sec_title = heading_of(sec) if sec else ("", "")
-        top = fig.find_parent(lambda t: any(c in ("ltx_section", "ltx_appendix") for c in (t.get("class") or [])))
-        top_num = heading_of(top)[0] if top else ""
+        sec_title = heading_of(sec)[1] if sec else ""
+        sec_num, top_num = numbered_ancestor(fig)
         in_app = fig.find_parent(class_="ltx_appendix") is not None
         table_html = None
         if kind == "table":
@@ -238,13 +253,24 @@ def pdf_pages(pdf: Path, sections: list, figures: list) -> int:
             return 0
     doc = pymupdf.open(pdf)
     texts = [" ".join(page.get_text().split()).lower() for page in doc]
+    # headings start a line; the same words inside a sentence ("see Section 3 method") must not count
+    lines = [[" ".join(ln.split()).lower() for ln in page.get_text().splitlines() if ln.strip()] for page in doc]
+
+    def starts(i, needle):
+        pg = lines[i]
+        for k, ln in enumerate(pg):
+            joined = (ln + " " + pg[k + 1]) if k + 1 < len(pg) else ln  # number and title may be split
+            if ln.startswith(needle) or joined.startswith(needle):
+                return True
+        return False
+
     cursor = 0
     for s in sections:
-        needle = " ".join(s["title"].split()).lower()[:60]
-        cands = [f"{s['number']} {needle}".strip(), needle] if s["number"] else [needle]
+        needle = " ".join(s["title"].split()).lower()[:40]
+        cands = [f"{s['number']} {needle}".strip(), f"{s['number']}. {needle}"] if s["number"] else [needle]
         hit = None
-        for i in range(cursor, len(texts)):
-            if any(c and c in texts[i] for c in cands):
+        for i in range(cursor, len(lines)):
+            if any(starts(i, c) for c in cands):
                 hit = i
                 break
         if hit is not None:
@@ -368,8 +394,8 @@ def crop_pdf_figures(doc, out_dir: Path) -> list:
             seen.add(m.group(2))
             figs.append({"kind": "figure", "number": m.group(2), "html_id": None,
                          "caption": m.group(3)[:600], "section": "", "section_title": "",
-                         "top_section": "", "in_appendix": False, "page": pno,
-                         "image_urls": [], "files": [f"figures/{name}"], "table_html": None})
+                         "top_section": "", "in_appendix": False, "page": pno, "image_urls": [],
+                         "files": [f"figures/{name}"], "png_files": [f"figures/{name}"], "table_html": None})
     return sorted(figs, key=lambda f: int(f["number"]))
 
 
@@ -423,6 +449,7 @@ def download_images(figs: list, out_dir: Path):
             else:
                 log(f"  no image at any of {cands}")
         f["files"], f["image_urls"] = files, ok_urls
+        f["png_files"] = f.get("png_files") or [x for x in files if not x.endswith(".svg")]
 
 
 # ---------------------------------------------------------------- content.md
@@ -431,9 +458,27 @@ def download_images(figs: list, out_dir: Path):
 def table_text(table_html: str, max_rows: int = 60) -> str:
     """A pipe table of the cell texts (math as $..$), so results can be transcribed exactly."""
     soup = BeautifulSoup(table_html, "html.parser")
-    rows = []
+    rows, carry = [], {}  # carry: column -> (text, rows left) for rowspan cells
     for tr in soup.find_all("tr")[:max_rows]:
-        cells = [" ".join(node_text(td, {}).split()).replace("|", "/") for td in tr.find_all(["td", "th"])]
+        cells, col = [], 0
+        tds = list(tr.find_all(["td", "th"]))
+        while tds or col in carry:
+            if col in carry:
+                text, left = carry[col]
+                cells.append(text)
+                carry[col] = (text, left - 1)
+                if left - 1 <= 0:
+                    del carry[col]
+                col += 1
+                continue
+            td = tds.pop(0)
+            text = " ".join(node_text(td, {}).split()).replace("|", "/")
+            span = int(td.get("rowspan", 1) or 1)
+            for k in range(int(td.get("colspan", 1) or 1)):
+                cells.append(text if k == 0 else "")
+                if span > 1:
+                    carry[col] = (text, span - 1)
+                col += 1
         if any(cells):
             rows.append("| " + " | ".join(cells) + " |")
     return "\n".join(rows)
@@ -516,6 +561,10 @@ def main():
         out({"dir": str(pdir), "cached": True, **{k: meta[k] for k in ("id", "title")}})
         return
     pdir.mkdir(parents=True, exist_ok=True)
+    old_meta = read_json(pdir / "meta.json", {}) or {}
+    for k in ("venue", "venue_evidence", "notion_url"):  # results of later steps survive a re-fetch
+        if old_meta.get(k) and not meta.get(k):
+            meta[k] = old_meta[k]
 
     pdf = pdir / "paper.pdf"
     if args.pdf:
@@ -556,7 +605,7 @@ def main():
     old_refs = (read_json(pdir / "refs.json", {}) or {}).get("refs", {})
     for k, r in refs.items():  # keep links that refs.py already found
         o = old_refs.get(k)
-        if o and o.get("url_source") == "arxiv-search" and not r.get("url") and o.get("title") == r.get("title"):
+        if o and o.get("url_source") == "arxiv-search" and not r.get("arxiv_id") and o.get("title") == r.get("title"):
             r.update({x: o[x] for x in ("arxiv_id", "url", "url_source")})
     write_json(pdir / "refs.json", {"refs": refs})
     write_content(pdir, meta, sections, figures)

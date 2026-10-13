@@ -94,7 +94,7 @@ def plain(text: str) -> str:
 def sentences(text: str) -> int:
     t = plain(text)
     parts = re.split(r"(?<=[.!?])\s+(?=\S)|(?<=다\.)\s*", t)
-    return len([p for p in parts if len(p.strip()) > 8])
+    return len([p for p in parts if len(p.strip()) > 3])
 
 
 def head_number(h: str) -> str:
@@ -126,8 +126,12 @@ def main():
         errors.append(f"front matter is not valid YAML: {front['__error__']}")
         front = {}
     tldr = front.get("tldr")
+    if isinstance(tldr, list):
+        for k, x in enumerate(tldr, 1):
+            if isinstance(x, dict):
+                errors.append(f"tldr line {k} was read as a mapping because it contains ': '; put the line in quotes")
     if not isinstance(tldr, list) or len(tldr) != 3 or not all(isinstance(x, str) and x.strip() for x in tldr):
-        errors.append("front matter 'tldr' must be a list of exactly 3 non-empty lines")
+        errors.append("front matter 'tldr' must be a list of exactly 3 non-empty lines (quote each line)")
     cats = front.get("category")
     cats = [cats] if isinstance(cats, str) else (cats or [])
     if not cats:
@@ -167,15 +171,15 @@ def main():
     for s in outline:
         if s["in_appendix"]:
             continue
-        top = (s["number"] or "").split(".")[0]
+        top = (s["number"] or s.get("parent") or "").split(".")[0]
         if top:
             top_src[top] = top_src.get(top, 0) + s.get("chars", 0)
     top_sum, cur = {}, None
     for kind, text, path in bl:
         if kind == "heading":
             n = head_number(text)
-            if path and path[-1][0] <= 2 and n:
-                cur = n.split(".")[0]
+            if path and path[-1][0] <= 2:
+                cur = n.split(".")[0] if n else None  # an unnumbered ## (e.g. Appendix highlights) ends the section
             continue
         if cur:
             top_sum[cur] = top_sum.get(cur, 0) + len(plain(text))
@@ -244,8 +248,12 @@ def main():
     linked_urls = [m.group(2).rstrip("/") for m in LINK.finditer(body)]
     for u in linked_urls:
         norm = re.sub(r"v\d+$", "", u.replace("http://", "https://"))
-        if "arxiv.org" in norm and norm not in known and norm.replace("/pdf/", "/abs/") not in known:
+        if norm in known or norm.replace("/pdf/", "/abs/") in known:
+            continue
+        if "arxiv.org" in norm:
             errors.append(f"arXiv link not found in refs.json or meta.json (possibly invented): {u}")
+        else:
+            warnings.append(f"link not found in refs.json or meta.json; keep it only if the paper gives it: {u}")
     cited_main = {k for k, r in refs.items() if r.get("url") and any(
         not s["in_appendix"] and (s["number"] or s["title"]) in (r.get("cited_in") or []) for s in outline)}
     linked = {k for k, r in refs.items() if r.get("url") and r["url"].rstrip("/") in

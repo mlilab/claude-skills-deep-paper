@@ -7,8 +7,10 @@ description: Deep, section-by-section reading of a research paper, saved to a No
 
 Produce a deep read of one paper at a time: a write-up that a researcher can use instead of a
 first full pass of the paper, and that keeps exact numbers, structure and citations. The skill
-directory is `<skill_dir>` (this file's folder). Run scripts with the Python that has the
-requirements installed (`setup.py status` prints it).
+directory is `<skill_dir>` (this file's folder). Below, `python3` means the Python that has the
+requirements installed, usually `~/.local/share/deep-paper/venv/bin/python`; `setup.py status`
+prints the one in use. The config is `~/.config/deep-paper/config.yaml`, or the file named by
+`$DEEP_PAPER_CONFIG`.
 
 Pipeline per paper: **resolve → fetch → refs + venue → read → write → check → publish**.
 
@@ -116,10 +118,12 @@ source, unresolved citations, figures that could not be uploaded).
 ## Several papers
 
 Process one paper per subagent, at most 5 at a time. Give each subagent this file and the
-writing guide, the paper input, and the backend. Never give the same paper to two subagents;
+writing guide, the paper input, and the backend. Subagents must be able to write files in
+`data_dir` (`summary.md`); if a tool blocks writing Markdown files, a shell heredoc works. Never give the same paper to two subagents;
 run `resolve.py` first and drop duplicates. After each batch, check the results before the next.
 
 ## Changing settings
 
-Edit `~/.config/deep-paper/config.yaml` (fields in `config.example.yaml`): language, backend,
-data directory, categories, figure counts, venues to check, check thresholds.
+Edit the config (fields in `config.example.yaml`): language, backend, data directory,
+categories, figure counts, venues to check, check thresholds, and `html.home_link` (a link back
+to a parent site shown on the index page).

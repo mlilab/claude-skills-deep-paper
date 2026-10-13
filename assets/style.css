@@ -37,6 +37,7 @@ button { font: inherit; color: inherit; }
 /* ---------------- index */
 .wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
 .masthead { padding: 36px 0 12px; }
+.masthead .home { font-size: 14px; display: inline-block; margin-bottom: 6px; }
 .masthead h1 { margin: 0; font-size: clamp(28px, 5vw, 40px); letter-spacing: -0.02em; }
 .sub { color: var(--muted); margin: 4px 0 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;

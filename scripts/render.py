@@ -84,12 +84,12 @@ def callouts(md_text: str) -> str:
         title = body[0] if body else ""
         rest = "\n".join(body[1:])
         outl += [f'<div class="callout {cls}" markdown="1">', "",
-                 f'<p class="callout-title"><span class="ci">{icon}</span> **{title}**</p>' if title else "",
-                 "", rest, "", "</div>", ""]
+                 f'<p class="callout-title"><span class="ci">{icon}</span> <strong>{inline_md(title, False)}</strong></p>'
+                 if title else "", "", rest, "", "</div>", ""]
     return "\n".join(outl)
 
 
-def figure_html(num: str, caption: str, figs: dict, t: dict) -> str:
+def figure_html(num: str, caption: str, figs: dict, t: dict, protect: bool = True) -> str:
     f = figs.get(num)
     if not f:
         return f'<p class="missing">Figure {esc(num)} not found</p>'
@@ -102,24 +102,29 @@ def figure_html(num: str, caption: str, figs: dict, t: dict) -> str:
             if page else "")
     return (f'<figure class="fig" id="fig-{esc(num)}"><div class="fig-imgs">{imgs}</div>'
             f'<figcaption><span class="fig-label">Figure {esc(num)}</span>{jump} '
-            f'{inline_md(caption)}</figcaption></figure>')
+            f'{inline_md(caption, protect)}</figcaption></figure>')
 
 
-def inline_md(text: str) -> str:
-    t, stash = protect_math(text or "")
+def inline_md(text: str, protect: bool = True) -> str:
+    """Markdown for one line. protect=False when the caller already swapped math for placeholders."""
+    t, stash = protect_math(text or "") if protect else (text or "", [])
     h = markdown.markdown(t, extensions=["sane_lists"])
     h = re.sub(r"^<p>(.*)</p>$", r"\1", h.strip(), flags=re.S)
-    return restore_math(h, stash)
+    return restore_math(h, stash) if protect else h
 
 
 def body_html(body: str, figs: dict, outline: list, t: dict) -> str:
     def fig_sub(m):
         cap = m.group(1)
         cap = re.sub(r"^(Figure|Fig\.)\s*[A-Za-z]?\d+[a-z]?\s*[:.]\s*", "", cap)
-        return "\n\n" + figure_html(m.group(2), cap, figs, t) + "\n\n"
-    text = callouts(body)
-    text, stash = protect_math(text)
+        return "\n\n" + figure_html(m.group(2), cap, figs, t, protect=False) + "\n\n"
+    # math first (placeholders survive Markdown); captions and callout titles reuse the same stash
+    text, stash = protect_math(body)
+    text = callouts(text)
     text = FIG_REF.sub(fig_sub, text)
+    # toggles: let Markdown work inside <details> (tables, lists)
+    text = re.sub(r"<details>\s*", '<details markdown="1">\n', text)
+    text = re.sub(r"(<summary>.*?</summary>)", r"\1\n", text)
     text = text.replace("<u>", "\x00U").replace("</u>", "\x00/U")
     h = markdown.markdown(text, extensions=["tables", "fenced_code", "md_in_html", "sane_lists"])
     h = h.replace("\x00U", "<u>").replace("\x00/U", "</u>")
@@ -257,8 +262,11 @@ def render_index(cfg, entries: list):
 <td>{''.join(f'<span class="chip cat">{esc(c)}</span>' for c in e.get('category', []))}</td>
 <td>{''.join(f'<span class="chip">{esc(x)}</span>' for x in e.get('tags', []))}</td>
 <td data-sort="{esc(e.get('added', ''))}">{esc(e.get('added', ''))}</td></tr>""")
+    hl = cfg["html"].get("home_link") or {}
+    home = (f'<a class="home" href="{esc(hl.get("href"))}">← {esc(hl.get("label", "Home"))}</a>'
+            if hl.get("href") else "")
     body = f"""<main class="wrap index">
-<header class="masthead"><h1>{esc(cfg["html"]["title"])}</h1><p class="sub">{len(entries)} {t["papers"]}</p></header>
+<header class="masthead">{home}<h1>{esc(cfg["html"]["title"])}</h1><p class="sub">{len(entries)} {t["papers"]}</p></header>
 <div class="toolbar"><div class="filters">{"".join(bar)}</div>
 <input class="search" type="search" placeholder="{t["search"]}"></div>
 <div class="table-wrap"><table class="db">

@@ -23,6 +23,7 @@ Extra columns in the user's database are fine; leave them empty unless the user 
 2. `notion_md.py --id <id> --out <tmp>/notion.json` produces `properties`, `icon`, `content`,
    `uploads`.
 3. Options: `update`/`create` tools reject multi-select values that are not existing options.
+   A new database starts with no Tags options, so add the paper's tags first.
    Use existing Category/Tags options when one fits. If `taxonomy.allow_new_options` is true and
    a new option is needed, add it to the column first with the data-source update tool, keeping
    all existing options in the list.

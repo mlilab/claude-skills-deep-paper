@@ -3,7 +3,9 @@
 
 usage: setup.py status                       # JSON: config, dependencies, backend readiness
        setup.py init --answers FILE [--force] # write ~/.config/deep-paper/config.yaml
-       setup.py notion-schema                 # the database columns to create in Notion
+       setup.py notion-schema                 # CREATE TABLE statement for the Notion database
+       setup.py notion-set --data-source ID --database-url URL [--parent-page URL]
+                                              # remember the database so every paper goes there
 
 Answers JSON for init (all optional except backend):
 {"backend": "html" | "notion" | "both", "language": "en" | "ko", "data_dir": "~/deep-papers",
@@ -97,10 +99,26 @@ def init(answers_path: str, force: bool):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=["status", "init", "notion-schema"])
+    ap.add_argument("action", choices=["status", "init", "notion-schema", "notion-set"])
     ap.add_argument("--answers")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--data-source")
+    ap.add_argument("--database-url")
+    ap.add_argument("--parent-page")
     args = ap.parse_args()
+    if args.action == "notion-set":
+        p = config_path()
+        if not p.exists():
+            raise SystemExit("run setup.py init first")
+        cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        ds = (args.data_source or "").replace("collection://", "")
+        if not ds:
+            raise SystemExit("--data-source is required")
+        cfg.setdefault("notion", {}).update({"data_source_id": ds, "database_url": args.database_url,
+                                             "parent_page": args.parent_page})
+        p.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        out({"notion": cfg["notion"]})
+        return
     if args.action == "status":
         status()
     elif args.action == "init":
@@ -109,10 +127,14 @@ def main():
         init(args.answers, args.force)
     else:
         cfg = load_config(required=False)
-        out({"columns": [{"name": n, "type": t, "meaning": m} for n, t, m in NOTION_COLUMNS],
-             "category_options": cfg["taxonomy"]["categories"],
-             "note": "Create it with the Notion MCP create-database tool (or by hand), share it with the "
-                     "integration if you upload figures, then put its data source id in notion.data_source_id."})
+        colors = ["blue", "purple", "orange", "green", "yellow", "pink", "red", "brown", "gray", "default"]
+        cats = ", ".join(f"'{c}':{colors[i % len(colors)]}" for i, c in enumerate(cfg["taxonomy"]["categories"]))
+        ddl = ('CREATE TABLE ("Title" TITLE, "Abbr" RICH_TEXT, "Link" URL, "Venue" RICH_TEXT, '
+               f'"Submitted" DATE, "Category" MULTI_SELECT({cats}), "Tags" MULTI_SELECT(), "Added" CREATED_TIME)')
+        out({"title": "Papers", "schema": ddl,
+             "columns": [{"name": n, "type": t, "meaning": m} for n, t, m in NOTION_COLUMNS],
+             "next": "notion-create-database with parent = the user's page and this schema; then "
+                     "setup.py notion-set --data-source <collection id> --database-url <url> --parent-page <page url>"})
 
 
 if __name__ == "__main__":
