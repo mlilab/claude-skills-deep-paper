@@ -9,7 +9,8 @@ live in the config, so a later "summarize this paper" uses them without asking a
 1. **Where to save**: `notion` (a table in a Notion page), `html` (a web page per paper with the
    PDF side by side), or `both`.
 2. **Write-up language**: `en`, or `ko` (Korean sentences with English technical terms). Other
-   languages follow the Korean rule.
+   languages follow the Korean rule. If the user wrote the request in English or asks for
+   English, use `en`. It can be changed later with `setup.py language en|ko`.
 3. Optional: categories (default list in `config.example.yaml`).
 
 Write the answers to a temporary JSON file outside the skill folder and run

@@ -8,6 +8,7 @@ usage: setup.py status                       # JSON: config, dependencies, backe
                                               # remember the database so every paper goes there
        setup.py html-set --mode daily-papers|github|local [--user GH_USER --repo REPO] [--data-dir DIR]
                                               # remember where the HTML site lives
+       setup.py language en|ko                # switch the write-up language for later papers
 
 Answers JSON for init (all optional except backend):
 {"backend": "html" | "notion" | "both", "language": "en" | "ko", "data_dir": "~/deep-papers",
@@ -129,7 +130,8 @@ def init(answers_path: str, force: bool):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("action", choices=["status", "init", "notion-schema", "notion-set", "html-set"])
+    ap.add_argument("action", choices=["status", "init", "notion-schema", "notion-set", "html-set", "language"])
+    ap.add_argument("value", nargs="?")
     ap.add_argument("--mode", choices=["daily-papers", "github", "local"])
     ap.add_argument("--user")
     ap.add_argument("--repo")
@@ -140,6 +142,18 @@ def main():
     ap.add_argument("--database-url")
     ap.add_argument("--parent-page")
     args = ap.parse_args()
+    if args.action == "language":
+        p = config_path()
+        if not p.exists():
+            raise SystemExit("run setup.py init first")
+        if not args.value:
+            raise SystemExit("usage: setup.py language en|ko")
+        cfg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        old = cfg.get("language", "en")
+        cfg["language"] = args.value.lower()
+        p.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        out({"language": cfg["language"], "was": old})
+        return
     if args.action == "html-set":
         p = config_path()
         if not p.exists():

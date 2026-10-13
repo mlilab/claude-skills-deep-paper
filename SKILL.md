@@ -26,6 +26,16 @@ and the language; Notion asks for a page, HTML goes into an existing daily-paper
 GitHub Pages repository. Once configured, **do not ask again**: every later request uses the
 saved choices.
 
+**Language**: when the user asks for the write-ups in another language at any point ("write it
+in English", "영어로 정리해줘"), switch the saved setting and use it from that paper on:
+
+```bash
+python3 <skill_dir>/scripts/setup.py language en     # or ko
+```
+
+A request that names a language for one paper only ("this one in English") applies to that paper
+and leaves the setting unchanged.
+
 ## 1. Resolve the paper
 
 ```bash

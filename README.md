@@ -17,7 +17,7 @@ the original PDF sit side by side.
 | Notion backend | One row per paper in a table inside a Notion page you choose (Title, Abbr, Venue, Submitted, Category, Tags, Link, Added), with the write-up as the row's page: callouts, toggles, tables and figures. |
 | HTML backend | An index of all papers with the same columns (sort, filter, search) and a split view per paper: the write-up on the left, the PDF on the right, and a `p.N` button on each section and figure that jumps the PDF to that page. |
 | Publishing | The HTML site goes to its own GitHub Pages repository (`https://<username>.github.io/<repository>/`), into an existing compatible paper site as a sub page, or stays on your machine. |
-| Languages | English, or Korean sentences with English technical terms (other languages work the same way). |
+| Languages | English, or Korean sentences with English technical terms (other languages work the same way). Say which one when you set it up, or switch at any time. |
 
 ## Requirements
 
@@ -68,6 +68,7 @@ The choices are saved in `~/.config/deep-paper/config.yaml` (see
 | "Read this paper in depth: https://arxiv.org/abs/1706.03762" | A full write-up, saved and published the configured way |
 | "Add *Deep Residual Learning for Image Recognition* to my paper DB" | Title search on arXiv, then the same |
 | "Deep-read these 6 papers for my related work: …" | One subagent per paper, five at a time |
+| "Write the next ones in English" | Switches the saved write-up language (`setup.py language en`) |
 | "Open the paper site" | The published URL, or `scripts/serve.py` and http://127.0.0.1:8010/ |
 
 ## How it works
