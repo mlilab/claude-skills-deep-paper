@@ -24,8 +24,7 @@
 
 ## Index columns
 
-Title, Abbr, Venue, Submitted, Category, Tags, Link (PDF, arXiv, Notion when also saved there),
-Added: the same columns as the Notion database. Click a column name to sort; filter by category
+Title, Abbr, Venue, Submitted, Category, Tags, Link (PDF, arXiv), Added: the same columns as the Notion database. Click a column name to sort; filter by category
 or search.
 
 ## Where the site lives (html.mode)

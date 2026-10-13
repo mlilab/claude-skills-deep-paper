@@ -261,11 +261,8 @@ def render_index(cfg, entries: list):
         links = e.get("links") or {}
         link_cell = "".join(f'<a href="{esc(u)}" target="_blank" rel="noopener">{n}</a> '
                             for n, u in (("PDF", links.get("pdf")), ("arXiv", links.get("abs"))) if u)
-        if e.get("notion_url"):
-            link_cell += f'<a href="{esc(e["notion_url"])}" target="_blank" rel="noopener">Notion</a>'
         rows.append(f"""<tr data-cats="{esc('|'.join(e.get('category', [])))}" data-search="{esc(search)}">
-<td class="t"><a href="{esc(e['page'])}"><span class="ico">{esc(e.get('icon', ''))}</span> {esc(e['title'])}</a>
-<div class="tl">{inline_md(e['tldr'][0]) if e.get('tldr') else ''}</div></td>
+<td class="t"><a href="{esc(e['page'])}">{esc(e['title'])}</a></td>
 <td data-sort="{esc(e.get('abbr', ''))}">{f'<span class="abbr">{esc(e["abbr"])}</span>' if e.get('abbr') else ''}</td>
 <td data-sort="{esc(e.get('venue', ''))}">{esc(e.get('venue', ''))}</td>
 <td data-sort="{esc(e.get('submitted', ''))}">{esc(e.get('submitted', ''))}</td>
