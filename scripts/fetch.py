@@ -299,6 +299,8 @@ def pdf_lines(doc):
                 if not spans:
                     continue
                 text = " ".join("".join(sp["text"] for sp in spans).split())
+                if re.fullmatch(r"\d{3}", text):  # line numbers in review templates (ICLR, NeurIPS, ...)
+                    continue
                 size = max(sp["size"] for sp in spans)
                 bold = all(("Bold" in sp["font"] or sp["flags"] & 16) for sp in spans)
                 rows.append((pno, text, round(size, 1), bold))
@@ -316,6 +318,21 @@ def pdf_extract(pdf: Path, out_dir: Path) -> dict:
     doc = pymupdf.open(pdf)
     rows = pdf_lines(doc)
     body_size = statistics.median([r[2] for r in rows]) if rows else 10
+    # some templates (ICLR, NeurIPS) print the number and an upper-case title on separate lines:
+    # "3.1" / "GENERATING A TRAINING DATASET". Join them and mark the result as a heading.
+    joined, k, forced = [], 0, set()
+    while k < len(rows):
+        pno, text, size, bold = rows[k]
+        nxt = rows[k + 1] if k + 1 < len(rows) else None
+        if (nxt and nxt[0] == pno and re.fullmatch(r"(?:[1-9]\d?|[A-H])(?:\.\d+){0,2}", text)
+                and re.fullmatch(r"[A-Z][A-Z0-9 ,:\-–()/&'?]{2,90}", nxt[1]) and sum(c.isalpha() for c in nxt[1]) >= 3):
+            joined.append((pno, f"{text} {nxt[1]}", max(size, nxt[2]), bold or nxt[3]))
+            forced.add(len(joined) - 1)
+            k += 2
+            continue
+        joined.append(rows[k])
+        k += 1
+    rows = joined
     toc = {(t.strip().lower()[:40]): (lvl, pno) for lvl, t, pno in doc.get_toc()}
     sections, cur, app, para = [], None, False, []
 
@@ -326,9 +343,9 @@ def pdf_extract(pdf: Path, out_dir: Path) -> dict:
                                       "mentions": sorted(set(re.findall(r"(?:Figure|Fig\.)\s*(\d+)", txt)))})
         para.clear()
 
-    for pno, text, size, bold in rows:
+    for idx, (pno, text, size, bold) in enumerate(rows):
         m = HEAD_RE.match(text)
-        is_head = bool(m) and (bold or size > body_size + 0.5 or text.lower()[:40] in toc)
+        is_head = bool(m) and (idx in forced or bold or size > body_size + 0.5 or text.lower()[:40] in toc)
         if m and m.group(1)[0].isalpha() and not app:
             is_head = is_head and bool(re.match(r"^[A-H]$", m.group(1)))  # appendix letters only at top level
         if is_head:
@@ -361,6 +378,61 @@ def pdf_extract(pdf: Path, out_dir: Path) -> dict:
             f["top_section"] = on_page[-1]["number"].split(".")[0]
             f["in_appendix"] = on_page[-1]["in_appendix"]
     return {"sections": sections, "figures": figures}
+
+
+def parse_pdf_refs(doc, sections: list) -> dict:
+    """Bibliography of a PDF-only paper: entries start at the left margin after the "References"
+    heading and continue with a hanging indent. Each entry gets an author-year label
+    ("Brooks et al., 2023"), a title guess and any arXiv id it names; cited_in lists the sections
+    whose text contains the label's surname and year."""
+    entries, cur, started, left = [], None, False, None
+    for pno, page in enumerate(doc, 1):
+        for b in page.get_text("blocks"):
+            t = " ".join(b[4].split())
+            if not t or re.fullmatch(r"[\d ]+", t) or t.startswith("Under review as"):
+                continue
+            if not started:
+                if re.fullmatch(r"(?i)references|bibliography", t):
+                    started = True
+                continue
+            if re.fullmatch(r"[A-H](\.\d+)?\s+[A-Z][A-Z0-9 ,:\-–()/&'?]{2,90}", t) or re.fullmatch(r"[A-H]", t):
+                started = False  # the appendix begins
+                break
+            if left is None:
+                left = b[0]
+            if b[0] <= left + 4 or cur is None:
+                cur = {"text": t}
+                entries.append(cur)
+            else:
+                cur["text"] += " " + t
+        if started is False and entries:
+            break
+    refs = {}
+    for k, e in enumerate(entries, 1):
+        t = re.sub(r"(\w)- (\w)", r"\1\2", e["text"])
+        parts = re.split(r"(?<=[a-z0-9\)])\.\s+(?=[A-Z0-9])", t, maxsplit=2)
+        authors = parts[0] if parts else ""
+        title = parts[1].strip().rstrip(".") if len(parts) > 1 else ""
+        title = re.split(r"\.\s+(?:arXiv|In\s|Proceedings|Advances|CoRR|Computer Science|https?:)", title)[0].rstrip(".")
+        first = authors.split(",")[0].strip().split(" and ")[0].strip()
+        surname = first.split()[-1] if first.split() else ""
+        n_auth = authors.count(",") + 1 + (" and " in authors)
+        years = re.findall(r"\b(19|20)(\d{2})[a-z]?\b", t)
+        year = (years[-1][0] + years[-1][1]) if years else ""
+        label = (f"{surname} et al., {year}" if n_auth > 2 else f"{surname}, {year}").strip(", ")
+        m = re.search(r"arXiv[:\s]*(\d{4}\.\d{4,5})", t, re.I) or re.search(r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})", t)
+        aid = m.group(1) if m else None
+        key = f"ref{k}"
+        cited = []
+        if surname and year:
+            pat = re.compile(rf"\b{re.escape(surname)}\b[^()]{{0,60}}?\b{year}")
+            for s in sections:
+                if any(pat.search(p["text"]) for p in s["paragraphs"]):
+                    cited.append(s["number"] or s["title"])
+        refs[key] = {"key": key, "label": label, "title": title, "text": t[:400], "arxiv_id": aid,
+                     "url": f"https://arxiv.org/abs/{aid}" if aid else None,
+                     "url_source": "bibliography" if aid else None, "cited_in": cited}
+    return refs
 
 
 def crop_pdf_figures(doc, out_dir: Path, only: set | None = None) -> list:
@@ -623,7 +695,9 @@ def main():
     elif pdf.exists():
         source = "pdf"
         got = pdf_extract(pdf, pdir / "figures")
-        sections, figures, refs = got["sections"], got["figures"], {}
+        sections, figures = got["sections"], got["figures"]
+        import pymupdf
+        refs = parse_pdf_refs(pymupdf.open(pdf), sections)
         import pymupdf
         n_pages = len(pymupdf.open(pdf))
     else:
